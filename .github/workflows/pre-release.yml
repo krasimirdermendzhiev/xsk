@@ -56,7 +56,7 @@ jobs:
       run: |
         cd releng/server
         cp -r "${JAVA_HOME}" jdk
-        docker build --platform linux/amd64,linux/arm64,linux/arm64/v8 -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} --build-arg JDK_TYPE=external-jdk --build-arg JDK_HOME=jdk .
+        docker build --platform linux/amd64,linux/arm64,linux/arm64/v8 -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} --build-arg JDK_TYPE=external-jdk --build-arg JDK_HOME=jdk --push .
         docker push krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }}
         cd ../../
     - name: Push XSK for SAP Cloud Foundry
