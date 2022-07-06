@@ -48,7 +48,7 @@ jobs:
       with:
         install: true
     - name: Set Multi-Builder Docker Buildx
-      run: docker buildx create --use --name multi-builder --platform linux/arm64,linux/amd64
+      run: docker buildx create --use --name multi-builder --platform linux/arm64,linux/amd64, linux/arm64/v8
     - name: Maven Build
       run: mvn clean install
     - name: Docker Login
