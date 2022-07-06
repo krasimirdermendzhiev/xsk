@@ -79,7 +79,7 @@ jobs:
         docker build --load -t krasimirdermendzhiev/xsk-kyma-runtime-base -f Dockerfile-base .
         docker push krasimirdermendzhiev/xsk-kyma-runtime-base
         docker build --load -t krasimirdermendzhiev/xsk-kyma-runtime .
-        docker push dirigibkrasimirdermendzhievlelabs/xsk-kyma-runtime
+        docker push krasimirdermendzhiev/xsk-kyma-runtime
         docker build --load -t krasimirdermendzhiev/xsk-kyma-runtime-distro -f Dockerfile-distro .
         docker push krasimirdermendzhiev/xsk-kyma-runtime-distro
         cd ../../
