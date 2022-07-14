@@ -47,7 +47,7 @@ jobs:
       with:
         install: true
     - name: Set Multi-Builder Docker Buildx
-      run: docker buildx create --use --name multi-builder --platform linux/arm64,linux/amd64,linux/arm64/v8
+      run: docker buildx create --use --name multi-builder --platform linux/arm64,linux/amd64,linux/arm/v7,linux/arm/v8
     - name: Maven Build
       run: mvn clean install
     - name: Docker Login
@@ -56,7 +56,7 @@ jobs:
       run: |
         cd releng/server
         cp -r "${JAVA_HOME}" jdk
-        docker build --platform linux/amd64,linux/arm64,linux/arm64/v8 -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} --build-arg JDK_TYPE=external-jdk --build-arg JDK_HOME=jdk --push .
+        docker build --load -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} --build-arg JDK_TYPE=external-jdk --build-arg JDK_HOME=jdk --push --no-cache.
         docker push krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }}
         cd ../../
     - name: Push XSK for SAP Cloud Foundry
