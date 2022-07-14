@@ -48,7 +48,7 @@ jobs:
       with:
         install: true
     - name: Set Multi-Builder Docker Buildx
-      run: docker buildx create --use --name multi-builder --platform linux/arm64,linux/amd64,linux/arm/v7,linux/arm/v8
+      run: docker buildx create --use --name multi-builder --platform linux/amd64,linux/arm/v7
     - name: Maven Build
       run: mvn clean install -Dmaven.test.skip=true -DskipTests -Dmaven.javadoc.skip=true
     - name: Docker Login
@@ -60,7 +60,7 @@ jobs:
         docker build --load -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} --build-arg JDK_TYPE=external-jdk --build-arg JDK_HOME=jdk --no-cache .
         docker build \
         --push \
-        --t krasimirdermendzhiev/xsk-kyma:${{ env.XSK_VERSION }} 
+        -t krasimirdermendzhiev/xsk-kyma:${{ env.XSK_VERSION }} 
         docker push krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }}
         cd ../../
     - name: Push XSK for SAP Cloud Foundry
