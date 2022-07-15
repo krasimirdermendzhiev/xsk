@@ -55,8 +55,8 @@ jobs:
       run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
     - name: Push XSK
       run: |
-        apt-get install qemu binfmt-support qemu-user-static
-        cd releng/server
+        sudo apt-get install qemu binfmt-support qemu-user-static
+        cd releng/server        
         cp -r "${JAVA_HOME}" jdk
         docker buildx build . --no-cache --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm64/v8 -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} --push
         cd ../../
