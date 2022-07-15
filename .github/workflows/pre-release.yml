@@ -57,7 +57,7 @@ jobs:
       run: |
         cd releng/server
         cp -r "${JAVA_HOME}" jdk
-        docker buildx build . --no-cache --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v8 -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} --push
+        docker buildx build . --no-cache --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm64/v8 -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} --push
         cd ../../
     - name: Push XSK for SAP Cloud Foundry
       run: |
