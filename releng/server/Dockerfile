@@ -34,7 +34,7 @@ FROM gcr.io/distroless/base-debian11:debug
 ENV CATALINA_HOME=/usr/local/tomcat
 ENV JAVA_HOME=/usr/local/jdk
 ENV PATH $PATH:$JAVA_HOME/bin
-ENV CPPFLAGS "-DPNG_ARM_NEON_OPT=0"
+# ENV CPPFLAGS "-DPNG_ARM_NEON_OPT=0"
 ENV CATALINA_OPTS="--add-opens java.base/java.lang.reflect=ALL-UNNAMED"
 
 USER nonroot
