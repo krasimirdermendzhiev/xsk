@@ -47,31 +47,33 @@ jobs:
       uses: docker/setup-buildx-action@v2
       with:
         install: true
-    - name: Set Multi-Builder Docker Buildx
-      run: |
-        docker buildx create --use --name multi-builder \
-        --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v8,linux/ppc64le,linux/s390x
     - name: Maven Build
       run: mvn clean install -Dmaven.test.skip=true -DskipTests -Dmaven.javadoc.skip=true
     - name: Docker Login
       run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
 # sudo apt-get install qemu binfmt-support qemu-user-static
+    - name: Push XSK for SAP Kyma Runtime
+      run: |
+        cd releng/sap-kyma-runtime
+        docker build --load -t krasimirdermendzhiev/xsk-kyma-runtime-base -f Dockerfile-base .
+        docker push krasimirdermendzhiev/xsk-kyma-runtime-base
+        cd ../../
     - name: Push XSK
       run: |
         cd releng/server
         cp -r "${JAVA_HOME}" jdk
-        docker build --load \
+        docker build . \
+        --no-cache \
+        --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v8,linux/amd64/v8 \
         -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} \
-        --build-arg JDK_TYPE=external-jdk \
-        --build-arg JDK_HOME=jdk \
-        .
-        docker push krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }}
+        --push
+        cd ../../
       # docker buildx build . \
       # --no-cache \
       # --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v8,linux/amd64/v8 \
       # -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} \
       # --push
-      #  cd ../../
+       
 #     - name: Push XSK for SAP Cloud Foundry
 #       run: |
 #         cd releng/sap-cf
@@ -86,16 +88,7 @@ jobs:
 #         docker build --load -t krasimirdermendzhiev/xsk-kyma:${{ env.XSK_VERSION }} --build-arg JDK_TYPE=external-jdk --build-arg JDK_HOME=jdk .
 #         docker push krasimirdermendzhiev/xsk-kyma:${{ env.XSK_VERSION }}
 #         cd ../../
-#     - name: Push XSK for SAP Kyma Runtime
-#       run: |
-#         cd releng/sap-kyma-runtime
-#         docker build --load -t krasimirdermendzhiev/xsk-kyma-runtime-base -f Dockerfile-base .
-#         docker push krasimirdermendzhiev/xsk-kyma-runtime-base
-#         docker build --load -t krasimirdermendzhiev/xsk-kyma-runtime .
-#         docker push krasimirdermendzhiev/xsk-kyma-runtime
-#         docker build --load -t krasimirdermendzhiev/xsk-kyma-runtime-distro -f Dockerfile-distro .
-#         docker push krasimirdermendzhiev/xsk-kyma-runtime-distro
-#         cd ../../
+    
 #     - uses: buildpacks/github-actions/setup-pack@v4.1.0
 #     - name: XSK Buildpack
 #       run: |

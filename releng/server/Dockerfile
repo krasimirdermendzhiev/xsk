@@ -4,7 +4,7 @@
 # (Optional) JDK_TYPE could be `default-jdk` or `external-jdk`
 ARG JDK_TYPE=default-jdk
 
-FROM  dirigiblelabs/xsk-kyma-runtime-base as base
+FROM  krasimirdermendzhiev/xsk-kyma-runtime-base as base
 
 COPY target/ROOT.war /usr/local/tomcat/webapps/
 
