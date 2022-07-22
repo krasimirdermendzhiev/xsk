@@ -71,13 +71,6 @@ jobs:
         -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} \
         --push
         cd ../../
-    - name: Push XSK Runtime
-      run: |
-        cd releng/server-runtime
-        cp -r "${JAVA_HOME}" jdk
-        docker build --load -t krasimirdermendzhiev/xsk-runtime:${{ env.XSK_VERSION }} --build-arg JDK_TYPE=external-jdk --build-arg JDK_HOME=jdk .
-        docker push krasimirdermendzhiev/xsk-runtime:${{ env.XSK_VERSION }}
-        cd ../../
     - name: Push XSK for SAP Cloud Foundry
       run: |
         cd releng/sap-cf
