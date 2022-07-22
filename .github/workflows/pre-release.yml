@@ -1,271 +1,166 @@
-name: Pre-release
+name: Build
 
 on:
   push:
-    tags:
-    - 'pre*'
+    branches: [ main ]
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      XSK_VERSION_BUILD: ${{ steps.XSK_VERSION_PRINT.outputs.XSK_VERSION_OUTPUT }}
-      XSK_HELM_SHA: ${{ steps.XSK_HELM_SHA.outputs.XSK_HELM_SHA_PRINT }}
+    env:
+      DOCKER_IMAGE_PREFIX: ${{ secrets.DOCKER_IMAGE_PREFIX }}
     steps:
-    #--------Restore success job-------#
-    - name: Previous succeeded job
-      id: success
-      uses: actions/cache@v2
-      with:
-          path: success-job-${{ github.sha }}-${{ matrix.name }}
-          key: success-job-job-${{ github.sha }}-${{ matrix.name }}
-    #--------Restore success job-------# 
-    - uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
-    - name: Download sapmachine JDK 17
-      run: |
-        download_url="https://github.com/SAP/SapMachine/releases/download/sapmachine-17.0.2/sapmachine-jdk-17.0.2_linux-x64_bin.tar.gz"
-        wget -O "${RUNNER_TEMP}/sapmachine-jdk-17.tar.gz" "${download_url}"
-    - name: Setup sapmachine JDK 17
-      uses: actions/setup-java@v2
-      with:
-        distribution: 'jdkfile'
-        jdkFile: ${{ runner.temp }}/sapmachine-jdk-17.tar.gz
-        java-version: '17.0.2'
-        architecture: x64
-    - name: Set XSK Version
-      run: echo XSK_VERSION=${GITHUB_REF#refs/*/} | tr pre " " | sed 's/   //'  >> $GITHUB_ENV
-    - name: XSK_VERSION_OUTPUT
-      run: echo "::set-output name=XSK_VERSION_OUTPUT::$XSK_VERSION"
-      id: XSK_VERSION_PRINT
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v2
-      with:
-        platforms: all
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-      with:
-        install: true
-    - name: Set Multi-Builder Docker Buildx
-      run: docker buildx create --use --name multi-builder --platform linux/arm64,linux/amd64
-    - name: Maven Build
-      run: mvn clean install
-    - name: Docker Login
-      run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
-    - name: Push XSK Base
-      run: |
-        cd releng/sap-kyma-runtime
-         docker build . \
-        --no-cache \
-        --platform  linux/amd64 \
-        -t krasimirdermendzhiev/xsk-kyma-runtime-base -f Dockerfile-base \
-        --push
-        cd ../../
-    - name: Push XSK
-      run: |
-        cd releng/server
-        cp -r "${JAVA_HOME}" jdk
-        docker build . \
-        --no-cache \
-        --platform  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v8 \
-        -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} \
-        --push
-        cd ../../
-    - name: Push XSK for SAP Cloud Foundry
-      run: |
-        cd releng/sap-cf
-        cp -r "${JAVA_HOME}" jdk
-        docker build --load -t krasimirdermendzhiev/xsk-cf:${{ env.XSK_VERSION }} --build-arg JDK_TYPE=external-jdk --build-arg JDK_HOME=jdk .
-        docker push krasimirdermendzhiev/xsk-cf:${{ env.XSK_VERSION }}
-        cd ../../
-    - name: Push XSK for SAP Kyma
-      run: |
-        cd releng/sap-kyma
-        docker build --load -t krasimirdermendzhiev/xsk-kyma:${{ env.XSK_VERSION }} .
-        docker push krasimirdermendzhiev/xsk-kyma:${{ env.XSK_VERSION }}
-        cd ../../
-    - name: Push XSK for SAP Kyma Runtime
-      run: |
-        cd releng/sap-kyma-runtime
-        docker build --load -t krasimirdermendzhiev/xsk-kyma-runtime .
-        docker push krasimirdermendzhiev/xsk-kyma-runtime
-        docker build --load -t krasimirdermendzhiev/xsk-kyma-runtime-distro -f Dockerfile-distro .
-        docker push krasimirdermendzhiev/xsk-kyma-runtime-distro
-        cd ../../
-    - uses: buildpacks/github-actions/setup-pack@v4.1.0
-    - name: XSK Buildpack
-      run: |
-        cd releng/buildpacks/xsk/
-        docker build --load --build-arg XSK_VERSION=${{ env.XSK_VERSION }} -t krasimirdermendzhiev/buildpacks-stack-base-xsk . --target base
-        docker tag krasimirdermendzhiev/buildpacks-stack-base-xsk krasimirdermendzhiev/buildpacks-stack-base-xsk:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-stack-base-xsk:${{ env.XSK_VERSION }}
-        docker build --load --build-arg XSK_VERSION=${{ env.XSK_VERSION }} -t krasimirdermendzhiev/buildpacks-stack-run-xsk . --target run
-        docker tag krasimirdermendzhiev/buildpacks-stack-run-xsk krasimirdermendzhiev/buildpacks-stack-run-xsk:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-stack-run-xsk:${{ env.XSK_VERSION }}
-        docker build --load --build-arg XSK_VERSION=${{ env.XSK_VERSION }} -t krasimirdermendzhiev/buildpacks-stack-build-xsk . --target build
-        docker tag krasimirdermendzhiev/buildpacks-stack-build-xsk krasimirdermendzhiev/buildpacks-stack-build-xsk:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-stack-build-xsk:${{ env.XSK_VERSION }}
-        cd buildpack/
-        find *.toml -type f -exec sed -i ''s/#{XSKVersion}#/${{ env.XSK_VERSION }}/g'' {} \;
-        pack buildpack package krasimirdermendzhiev/buildpacks-xsk --config ./package.toml
-        docker tag krasimirdermendzhiev/buildpacks-xsk krasimirdermendzhiev/buildpacks-xsk:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-xsk:${{ env.XSK_VERSION }}
-        pack builder create krasimirdermendzhiev/buildpacks-builder-xsk --config ./builder.toml
-        docker tag krasimirdermendzhiev/buildpacks-builder-xsk krasimirdermendzhiev/buildpacks-builder-xsk:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-builder-xsk:${{ env.XSK_VERSION }}
-        cd ../../../../
-    - name: XSK Kyma Buildpack
-      run: |
-        cd releng/buildpacks/xsk-kyma/
-        docker build --load --build-arg XSK_VERSION=${{ env.XSK_VERSION }} -t krasimirdermendzhiev/buildpacks-stack-base-xsk-kyma . --target base
-        docker tag krasimirdermendzhiev/buildpacks-stack-base-xsk-kyma krasimirdermendzhiev/buildpacks-stack-base-xsk-kyma:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-stack-base-xsk-kyma:${{ env.XSK_VERSION }}
-        docker build --load --build-arg XSK_VERSION=${{ env.XSK_VERSION }} -t krasimirdermendzhiev/buildpacks-stack-run-xsk-kyma . --target run
-        docker tag krasimirdermendzhiev/buildpacks-stack-run-xsk-kyma krasimirdermendzhiev/buildpacks-stack-run-xsk-kyma:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-stack-run-xsk-kyma:${{ env.XSK_VERSION }}
-        docker build --load --build-arg XSK_VERSION=${{ env.XSK_VERSION }} -t krasimirdermendzhiev/buildpacks-stack-build-xsk-kyma . --target build
-        docker tag krasimirdermendzhiev/buildpacks-stack-build-xsk-kyma krasimirdermendzhiev/buildpacks-stack-build-xsk-kyma:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-stack-build-xsk-kyma:${{ env.XSK_VERSION }}
-        cd buildpack/
-        find *.toml -type f -exec sed -i ''s/#{XSKVersion}#/${{ env.XSK_VERSION }}/g'' {} \;
-        pack buildpack package krasimirdermendzhiev/buildpacks-xsk-kyma --config ./package.toml
-        docker tag krasimirdermendzhiev/buildpacks-xsk-kyma krasimirdermendzhiev/buildpacks-xsk-kyma:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-xsk-kyma:${{ env.XSK_VERSION }}
-        pack builder create krasimirdermendzhiev/buildpacks-builder-xsk-kyma --config ./builder.toml
-        docker tag krasimirdermendzhiev/buildpacks-builder-xsk-kyma krasimirdermendzhiev/buildpacks-builder-xsk-kyma:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-builder-xsk-kyma:${{ env.XSK_VERSION }}
-        cd ../../../../
-    - name: XSK Kyma Runtime Buildpack
-      run: |
-        cd releng/buildpacks/xsk-kyma-runtime/
-        docker build --load -t krasimirdermendzhiev/buildpacks-stack-base-xsk-kyma-runtime . --target base
-        docker push krasimirdermendzhiev/buildpacks-stack-base-xsk-kyma-runtime
-        docker build --load -t krasimirdermendzhiev/buildpacks-stack-run-xsk-kyma-runtime . --target run
-        docker push krasimirdermendzhiev/buildpacks-stack-run-xsk-kyma-runtime
-        docker build --load -t krasimirdermendzhiev/buildpacks-stack-build-xsk-kyma-runtime . --target build
-        docker push krasimirdermendzhiev/buildpacks-stack-build-xsk-kyma-runtime
-        cd buildpack/
-        find *.toml -type f -exec sed -i ''s/#{XSKVersion}#/latest/g'' {} \;
-        pack buildpack package krasimirdermendzhiev/buildpacks-xsk-kyma-runtime --config ./package.toml
-        docker push krasimirdermendzhiev/buildpacks-xsk-kyma-runtime
-        pack builder create krasimirdermendzhiev/buildpacks-builder-xsk-kyma-runtime --config ./builder.toml
-        docker push krasimirdermendzhiev/buildpacks-builder-xsk-kyma-runtime
-        cd ../../../../
-    - name: XSK Cloud Foundry Buildpack
-      run: |
-        cd releng/buildpacks/xsk-cf/
-        docker build --load --build-arg XSK_VERSION=${{ env.XSK_VERSION }} -t krasimirdermendzhiev/buildpacks-stack-base-xsk-cf . --target base
-        docker tag krasimirdermendzhiev/buildpacks-stack-base-xsk-cf krasimirdermendzhiev/buildpacks-stack-base-xsk-cf:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-stack-base-xsk-cf:${{ env.XSK_VERSION }}
-        docker build --load --build-arg XSK_VERSION=${{ env.XSK_VERSION }} -t krasimirdermendzhiev/buildpacks-stack-run-xsk-cf . --target run
-        docker tag krasimirdermendzhiev/buildpacks-stack-run-xsk-cf krasimirdermendzhiev/buildpacks-stack-run-xsk-cf:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-stack-run-xsk-cf:${{ env.XSK_VERSION }}
-        docker build --load --build-arg XSK_VERSION=${{ env.XSK_VERSION }} -t krasimirdermendzhiev/buildpacks-stack-build-xsk-cf . --target build
-        docker tag krasimirdermendzhiev/buildpacks-stack-build-xsk-cf krasimirdermendzhiev/buildpacks-stack-build-xsk-cf:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-stack-build-xsk-cf:${{ env.XSK_VERSION }}
-        cd buildpack/
-        find *.toml -type f -exec sed -i ''s/#{XSKVersion}#/${{ env.XSK_VERSION }}/g'' {} \;
-        pack buildpack package krasimirdermendzhiev/buildpacks-xsk-cf --config ./package.toml
-        docker tag krasimirdermendzhiev/buildpacks-xsk-cf krasimirdermendzhiev/buildpacks-xsk-cf:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-xsk-cf:${{ env.XSK_VERSION }}
-        pack builder create krasimirdermendzhiev/buildpacks-builder-xsk-cf --config ./builder.toml
-        docker tag krasimirdermendzhiev/buildpacks-builder-xsk-cf krasimirdermendzhiev/buildpacks-builder-xsk-cf:${{ env.XSK_VERSION }}
-        docker push krasimirdermendzhiev/buildpacks-builder-xsk-cf:${{ env.XSK_VERSION }}
-        cd ../../../../
-
-# #----------------Helm Release------------------#
-#     - id: install-secret-key
-#       name: Install gpg secret key
-#       run: |
-#         cat <(echo -e "${{ secrets.GPG_KEY_HELM }}") | gpg --batch --import  --no-tty --batch --yes
-#     - name: Helm tool installer
-#       uses: Azure/setup-helm@v1
-#     - name: Helm Charts Release - Checkout gh-pages
-#       run: |
-#         mkdir charts-temp
-#         cp -r releng/helm-charts/ charts-temp/
-#         #### Git Checkout Workaround
-#         git add .github/
-#         git add .reuse/
-#         git add LICENSES/
-#         git add modules/
-#         git add releng/
-#         git add samples/
-#         git reset --hard
-#         ####
-#         git fetch
-#         git checkout gh-pages
-#         cp charts/* .        
-#     - name: Helm Charts Release - Set Chart Version - XSK
-#       run: |
-#         cd charts-temp/helm-charts/
-#         find xsk/*.yaml -type f -exec sed -i ''s/#{XSKVersion}#/${{ env.XSK_VERSION }}/g'' {} \;
-#         find xsk-kpack/*.yaml -type f -exec sed -i ''s/#{XSKVersion}#/${{ env.XSK_VERSION }}/g'' {} \;
-#         find xsk-kpack/templates/*.yaml -type f -exec sed -i ''s/#{XSKVersion}#/${{ env.XSK_VERSION }}/g'' {} \;
-#         find xsk-landscape/*.yaml -type f -exec sed -i ''s/#{XSKVersion}#/${{ env.XSK_VERSION }}/g'' {} \;
-#     - name: Helm Charts Release
-#       run: |
-#         cp charts/* charts-temp/helm-charts/
-#         cd charts-temp/helm-charts/
-          
-#         gpg --no-tty --batch --export-secret-keys > ~/.gnupg/secring.gpg
-#         helm package --sign --key "XSK-gpg" --keyring /home/runner/.gnupg/secring.gpg xsk
-#         helm package --sign --key "XSK-gpg" --keyring /home/runner/.gnupg/secring.gpg xsk-kpack
-#         helm package --sign --key "XSK-gpg" --keyring /home/runner/.gnupg/secring.gpg xsk-landscape        
-#     - name: Verify helm chart
-#       run: |
-#         wget https://xsk.io/charts/pubring.gpg -O ~/.gnupg/pubring.gpg
-#         cd charts-temp/helm-charts/
-#         OUTPUT=$(helm verify --keyring ~/.gnupg/pubring.gpg xsk-${{ env.XSK_VERSION }}.tgz)
-#         OUTPUT="${OUTPUT//'%'/'%25'}"
-#         OUTPUT="${OUTPUT//$'\n'/'%0A'}"
-#         OUTPUT="${OUTPUT//$'\r'/'%0D'}"
-#         HELM_SHA=$(echo "$OUTPUT" | tail -n1)
-#         SHA=$(sed -e 's#.*sha256:\(\)#\1#' <<< $HELM_SHA )
-#         echo "::set-output name=XSK_HELM_SHA_PRINT::$SHA"
-#       id: XSK_HELM_SHA
-#     - name: Helm Chart Release Index
-#       run: |
-#         cd charts-temp/
-#         helm repo index helm-charts/ --url https://sap.github.io/xsk/charts
-#         cp -rf helm-charts/index.yaml ../.
-#         cp -rf helm-charts/xsk-${{ env.XSK_VERSION }}.tgz ../charts/
-#         cp -rf helm-charts/xsk-${{ env.XSK_VERSION }}.tgz.prov ../charts/
-#         cp -rf helm-charts/xsk-kpack-${{ env.XSK_VERSION }}.tgz ../charts/
-#         cp -rf helm-charts/xsk-kpack-${{ env.XSK_VERSION }}.tgz.prov ../charts/
-#         cp -rf helm-charts/xsk-landscape-${{ env.XSK_VERSION }}.tgz ../charts/
-#         cp -rf helm-charts/xsk-landscape-${{ env.XSK_VERSION }}.tgz.prov ../charts/
-#         cd ..
-#         git config user.name "$GITHUB_ACTOR"
-#         git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-#         git add index.yaml
-#         git add charts/
-#         git commit -m "Updates Helm Charts - Release ${{ env.XSK_VERSION }} - ci skip"
-#         git push origin gh-pages
-#         git add .
-#         git reset --hard
-#         git checkout main
-
-#     - name: Slack Notification
-#       if: ${{ failure() }}
-#       uses: slackapi/slack-github-action@v1.14.0
-#       with:
-#         payload: "{\"type\":\"Pre-release\",\"url\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
-#       env:
-#         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-#   Stage-release:
-#       needs: build 
-#       uses: ./.github/workflows/stage-release.yaml
-#       with:
-#         XSK_VERSION: ${{ needs.build.outputs.XSK_VERSION_BUILD }}
-#         XSK_HELM_SHA: ${{ needs.build.outputs.XSK_HELM_SHA }}
-#         XSK_DISPATCH: 'false'
-#       secrets:
-#         STAGE_KYMA_CONFIG: ${{ secrets.STAGE_KYMA_CONFIG }}
-#         STAGE_HANA_URL: ${{ secrets.STAGE_HANA_URL }}
-#         STAGE_HANA_USERNAME: ${{ secrets.STAGE_HANA_USERNAME }}
-#         STAGE_HANA_PASSWORD: ${{ secrets.STAGE_HANA_PASSWORD }}
-#         STAGE_KYMA_HOST: ${{ secrets.STAGE_KYMA_HOST }}
-#         STAGE_NAMESPACE: ${{ secrets.STAGE_NAMESPACE }}
-#         STAGE_SERVICE_ACCOUNT: ${{ secrets.STAGE_SERVICE_ACCOUNT }}
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Download sapmachine JDK 17
+        run: |
+          download_url="https://github.com/SAP/SapMachine/releases/download/sapmachine-17.0.2/sapmachine-jdk-17.0.2_linux-x64_bin.tar.gz"
+          wget -O "${RUNNER_TEMP}/sapmachine-jdk-17.tar.gz" "${download_url}"
+      - name: Setup sapmachine JDK 17
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'jdkfile'
+          jdkFile: ${{ runner.temp }}/sapmachine-jdk-17.tar.gz
+          java-version: '17.0.2'
+          architecture: x64
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: all
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          install: true
+      - name: Set Multi-Builder Docker Buildx
+        run: docker buildx create --use --name multi-builder --platform linux/arm64,linux/amd64
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v1
+        if: ${{ env.SONAR_TOKEN != '' }}
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Maven Build and Analyze
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          [ "$SONAR_TOKEN" ] && SONAR_ARG="-B sonar:sonar -Dsonar.projectKey=SAP_xsk"
+          mvn clean install $SONAR_ARG
+      - name: Docker Login
+        run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}} ${{secrets.DOCKER_REGISTRY}}
+      - name: Push XSK
+        run: |
+          cd releng/server
+          cp -r "${JAVA_HOME}" jdk
+          docker build . \
+          --no-cache \
+          --platform  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v8 \
+          -t krasimirdermendzhiev/xsk:${{ env.XSK_VERSION }} \
+          --push
+          cd ../../
+      - name: Push XSK Runtime
+        run: |
+          cd releng/server-runtime
+          cp -r "${JAVA_HOME}" jdk
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-runtime --build-arg JDK_TYPE=external-jdk --build-arg JDK_HOME=jdk .
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-runtime
+          cd ../../
+      - name: Push XSK for SAP Cloud Foundry
+        run: |
+          cd releng/sap-cf
+          cp -r "${JAVA_HOME}" jdk
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-cf --build-arg JDK_TYPE=external-jdk --build-arg JDK_HOME=jdk .
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-cf
+          cd ../../
+      - name: Push XSK for SAP Kyma
+        run: |
+          cd releng/sap-kyma
+          cp -r "${JAVA_HOME}" jdk
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-kyma --build-arg JDK_TYPE=external-jdk --build-arg JDK_HOME=jdk .
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-kyma
+          cd ../../
+      - name: Push XSK for SAP Kyma Runtime
+        run: |
+          cd releng/sap-kyma-runtime
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-kyma-runtime-base -f Dockerfile-base .
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-kyma-runtime-base
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-kyma-runtime .
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-kyma-runtime
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-kyma-runtime-distro -f Dockerfile-distro .
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}xsk-kyma-runtime-distro
+          cd ../../
+      - uses: buildpacks/github-actions/setup-pack@v4.1.0
+      - name: XSK Buildpack
+        run: |
+          cd releng/buildpacks/xsk/
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-base-xsk . --target base
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-base-xsk
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-run-xsk . --target run
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-run-xsk
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-build-xsk . --target build
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-build-xsk
+          cd buildpack/
+          find *.toml -type f -exec sed -i ''s/#{XSKVersion}#/latest/g'' {} \;
+          pack buildpack package ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-xsk --config ./package.toml
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-xsk
+          pack builder create ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-builder-xsk --config ./builder.toml
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-builder-xsk
+          cd ../../../../
+      - name: XSK Kyma Buildpack
+        run: |
+          cd releng/buildpacks/xsk-kyma/
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-base-xsk-kyma . --target base
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-base-xsk-kyma
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-run-xsk-kyma . --target run
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-run-xsk-kyma
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-build-xsk-kyma . --target build
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-build-xsk-kyma
+          cd buildpack/
+          find *.toml -type f -exec sed -i ''s/#{XSKVersion}#/latest/g'' {} \;
+          pack buildpack package ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-xsk-kyma --config ./package.toml
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-xsk-kyma
+          pack builder create ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-builder-xsk-kyma --config ./builder.toml
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-builder-xsk-kyma
+          cd ../../../../
+      - name: XSK Kyma Runtime Buildpack
+        run: |
+          cd releng/buildpacks/xsk-kyma-runtime/
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-base-xsk-kyma-runtime . --target base
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-base-xsk-kyma-runtime
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-run-xsk-kyma-runtime . --target run
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-run-xsk-kyma-runtime
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-build-xsk-kyma-runtime . --target build
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-build-xsk-kyma-runtime
+          cd buildpack/
+          find *.toml -type f -exec sed -i ''s/#{XSKVersion}#/latest/g'' {} \;
+          pack buildpack package ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-xsk-kyma-runtime --config ./package.toml
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-xsk-kyma-runtime
+          pack builder create ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-builder-xsk-kyma-runtime --config ./builder.toml
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-builder-xsk-kyma-runtime
+          cd ../../../../
+      - name: XSK Cloud Foundry Buildpack
+        run: |
+          cd releng/buildpacks/xsk-cf/
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-base-xsk-cf . --target base
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-base-xsk-cf
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-run-xsk-cf . --target run
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-run-xsk-cf
+          docker build --load -t ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-build-xsk-cf . --target build
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-stack-build-xsk-cf
+          cd buildpack/
+          find *.toml -type f -exec sed -i ''s/#{XSKVersion}#/latest/g'' {} \;
+          pack buildpack package ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-xsk-cf --config ./package.toml
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-xsk-cf
+          pack builder create ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-builder-xsk-cf --config ./builder.toml
+          docker push ${DOCKER_IMAGE_PREFIX:-krasimirdermendzhiev/}buildpacks-builder-xsk-cf
+          cd ../../../../
+      - name: Slack Notification
+        if: ${{ failure() && env.SLACK_WEBHOOK_URL != '' }}
+        uses: slackapi/slack-github-action@v1.14.0
+        with:
+          payload: "{\"type\":\"Build\",\"url\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
